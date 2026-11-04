@@ -862,3 +862,460 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+/**
+ * =========================================================================
+ * MÓDULO DE IMPORTAÇÃO DE PLANILHA DE IMPRESSORAS
+ * =========================================================================
+ */
+
+let linhasParaImportarImpressoras = [];
+let arquivoPlanilhaAtualImpressoras = null;
+
+/**
+ * Abre o modal de importação de planilha de impressoras
+ */
+function openModalImportarPlanilhaImpressoras() {
+  resetarArquivoPlanilhaImpressoras();
+  const inputInicio = document.getElementById('import-imp-linha-inicio');
+  const inputFim = document.getElementById('import-imp-linha-fim');
+  if (inputInicio) inputInicio.value = '2';
+  if (inputFim) inputFim.value = '';
+  setupDragAndDropPlanilhaImpressoras();
+  openModal('modal-importar-planilha-impressoras');
+}
+
+/**
+ * Configura eventos de arrastar e soltar (Drag and Drop)
+ */
+function setupDragAndDropPlanilhaImpressoras() {
+  const dropArea = document.getElementById('drop-area-planilha-imp');
+  const inputArquivo = document.getElementById('input-arquivo-planilha-imp');
+  if (!dropArea || dropArea.dataset.configured === 'true') return;
+
+  dropArea.dataset.configured = 'true';
+
+  dropArea.onclick = (e) => {
+    if (e.target.closest('#upload-file-info-imp')) return;
+    inputArquivo.click();
+  };
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropArea.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropArea.classList.add('border-cyan-400', 'bg-cyan-950/20');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropArea.classList.remove('border-cyan-400', 'bg-cyan-950/20');
+    }, false);
+  });
+
+  dropArea.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files && files.length > 0) {
+      analisarArquivoPlanilhaImpressoras(files[0]);
+    }
+  }, false);
+}
+
+/**
+ * Trata seleção de arquivo via input
+ */
+function processarArquivoSelecionadoImpressoras(event) {
+  const file = event.target.files[0];
+  if (file) {
+    analisarArquivoPlanilhaImpressoras(file);
+  }
+}
+
+/**
+ * Reseta o estado do modal para novo arquivo
+ */
+function resetarArquivoPlanilhaImpressoras(event) {
+  if (event) event.stopPropagation();
+
+  arquivoPlanilhaAtualImpressoras = null;
+  linhasParaImportarImpressoras = [];
+
+  const inputArquivo = document.getElementById('input-arquivo-planilha-imp');
+  if (inputArquivo) inputArquivo.value = '';
+
+  const placeholder = document.getElementById('upload-placeholder-imp');
+  const fileInfo = document.getElementById('upload-file-info-imp');
+  const summaryCards = document.getElementById('import-summary-cards-imp');
+  const previewContainer = document.getElementById('import-preview-container-imp');
+  const btnExec = document.getElementById('btn-executar-importacao-imp');
+  const progressArea = document.getElementById('import-progress-area-imp');
+
+  if (placeholder) placeholder.classList.remove('hidden');
+  if (fileInfo) fileInfo.classList.add('hidden');
+  if (summaryCards) summaryCards.classList.add('hidden');
+  if (previewContainer) previewContainer.classList.add('hidden');
+  if (progressArea) progressArea.classList.add('hidden');
+  if (btnExec) btnExec.disabled = true;
+}
+
+/**
+ * Extrai Modelo, IP e Serial Number a partir do texto combinado da coluna EQUIPAMENTO.
+ */
+function extrairEquipamentoImp(rawEquip) {
+  if (!rawEquip) return { modelo: '', ip: '', serialNumber: '' };
+
+  const text = String(rawEquip).trim();
+  if (!text) return { modelo: '', ip: '', serialNumber: '' };
+
+  // 1. Procura por formato de IPv4 na célula (ex: 10.1.28.70)
+  const ipRegex = /\b((?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))\b/;
+  const ipMatch = text.match(ipRegex);
+
+  if (ipMatch) {
+    const ip = ipMatch[1];
+    const ipIndex = text.indexOf(ip);
+
+    // O que está antes do IP é o Modelo
+    let antes = text.substring(0, ipIndex).trim();
+    antes = antes.replace(/[\s\-_]+$/, '').trim();
+
+    // O que está depois do IP é o Serial Number (se existir)
+    let depois = text.substring(ipIndex + ip.length).trim();
+    depois = depois.replace(/^[\s\-_]+/, '').trim();
+
+    return {
+      modelo: antes || text,
+      ip: ip,
+      serialNumber: depois || ''
+    };
+  }
+
+  // 2. Fallback caso não encontre padrão IP: divide por ' - '
+  const partes = text.split(/\s+-\s+/);
+  if (partes.length === 1) {
+    return {
+      modelo: partes[0].trim(),
+      ip: '',
+      serialNumber: ''
+    };
+  } else if (partes.length === 2) {
+    return {
+      modelo: partes[0].trim(),
+      ip: '',
+      serialNumber: partes[1].trim()
+    };
+  } else {
+    return {
+      modelo: partes[0].trim(),
+      ip: partes[1].trim(),
+      serialNumber: partes.slice(2).join(' - ').trim()
+    };
+  }
+}
+
+function parseValorNumericoImp(val) {
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  let s = String(val).trim().replace(/R\$/gi, '').replace(/\s/g, '');
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  }
+  const num = parseFloat(s);
+  return isNaN(num) ? 0 : num;
+}
+
+function parseRateioImp(val) {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'string') {
+    const clean = val.replace('%', '').trim().replace(',', '.');
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+  }
+  if (typeof val === 'number') {
+    if (val > 0 && val <= 1) return Number((val * 100).toFixed(2));
+    return val;
+  }
+  return 0;
+}
+
+/**
+ * Lê e analisa a planilha no cliente ou via API
+ */
+async function analisarArquivoPlanilhaImpressoras(file) {
+  arquivoPlanilhaAtualImpressoras = file;
+
+  // Atualizar badge do arquivo
+  document.getElementById('upload-placeholder-imp').classList.add('hidden');
+  const fileInfo = document.getElementById('upload-file-info-imp');
+  fileInfo.classList.remove('hidden');
+  document.getElementById('label-nome-arquivo-imp').textContent = file.name;
+  document.getElementById('label-tamanho-arquivo-imp').textContent = `${(file.size / 1024).toFixed(1)} KB`;
+
+  const startRow = parseInt(document.getElementById('import-imp-linha-inicio').value || '2', 10);
+  const endRowVal = document.getElementById('import-imp-linha-fim').value;
+  const endRow = endRowVal ? parseInt(endRowVal, 10) : null;
+
+  // Tentar análise rápida no frontend com SheetJS
+  if (typeof XLSX !== 'undefined') {
+    try {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+        processarLinhasClientSideImpressoras(rawRows, startRow, endRow);
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    } catch (err) {
+      console.warn('Falha na leitura local de impressoras com SheetJS, usando backend:', err);
+    }
+  }
+
+  // Fallback: enviar para o backend analisar
+  try {
+    const formData = new FormData();
+    formData.append('planilha', file);
+    formData.append('startRow', startRow);
+    if (endRow) formData.append('endRow', endRow);
+
+    const res = await fetch('/api/impressoras/previa-planilha', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      linhasParaImportarImpressoras = data.preview;
+      renderizarPreviaImportacaoImpressoras(data.preview, data.resumo);
+    } else {
+      showToast('Erro ao processar planilha: ' + data.message, 'error');
+    }
+  } catch (e) {
+    showToast('Falha na comunicação ao analisar planilha de impressoras', 'error');
+  }
+}
+
+/**
+ * Processamento dos dados no frontend via SheetJS
+ */
+function processarLinhasClientSideImpressoras(rawRows, startRow, endRow) {
+  if (rawRows.length < 2) {
+    showToast('A planilha precisa ter um cabeçalho na linha 1 e dados a partir da linha 2.', 'warning');
+    return;
+  }
+
+  const idxInicio = Math.max(1, startRow - 1);
+  const idxFim = endRow ? Math.min(rawRows.length - 1, endRow - 1) : rawRows.length - 1;
+
+  linhasParaImportarImpressoras = [];
+  let impressorasValidas = 0;
+  let comIp = 0;
+  let comSerial = 0;
+  let linhasVazias = 0;
+
+  for (let r = idxInicio; r <= idxFim; r++) {
+    const row = rawRows[r];
+
+    // Colunas especificadas pelo usuário:
+    // A (0) - DEPARTAMENTO
+    // B (1) - EQUIPAMENTO (modelo - ip - serial)
+    // C (2) - Nº Anterior (IGNORAR)
+    // D (3) - Nº Final (IGNORAR)
+    // E (4) - TOTAL (IGNORAR)
+    // F (5) - VALOR UN.
+    // G (6) - VALOR TOTAL (IGNORAR)
+    // H (7) - CENTRO DE CUSTO
+    // I (8) - % RATEIO
+    // J (9) - (IGNORAR)
+    // K (10) - OBSERVAÇÕES
+    const departamento = String(row[0] || '').trim();
+    const rawEquipamento = String(row[1] || '').trim();
+    const valorUn = parseValorNumericoImp(row[5]);
+    const centroDeCusto = String(row[7] || '').trim();
+    const porcentRateio = parseRateioImp(row[8]);
+    const observacao = String(row[10] || '').trim();
+
+    const { modelo, ip, serialNumber } = extrairEquipamentoImp(rawEquipamento);
+
+    const isVazia = !departamento && !rawEquipamento && !centroDeCusto && !observacao;
+
+    const item = {
+      linhaExcel: r + 1,
+      departamento,
+      equipamentoOriginal: rawEquipamento,
+      modelo,
+      ip,
+      serialNumber,
+      valorUn,
+      centroDeCusto,
+      porcentRateio,
+      observacao,
+      isVazia
+    };
+
+    if (isVazia) {
+      linhasVazias++;
+    } else {
+      impressorasValidas++;
+      if (ip) comIp++;
+      if (serialNumber) comSerial++;
+    }
+
+    linhasParaImportarImpressoras.push(item);
+  }
+
+  // Preenche input de linha final com a última linha se estiver vazio
+  const inputFim = document.getElementById('import-imp-linha-fim');
+  if (inputFim && !inputFim.value) {
+    inputFim.value = idxFim + 1;
+  }
+
+  renderizarPreviaImportacaoImpressoras(linhasParaImportarImpressoras, {
+    totalNaFaixa: linhasParaImportarImpressoras.length,
+    impressorasValidas,
+    comIp,
+    comSerial,
+    linhasVazias
+  });
+}
+
+/**
+ * Renderiza os indicadores e a tabela de prévia de impressoras
+ */
+function renderizarPreviaImportacaoImpressoras(previewRows, resumo) {
+  const summaryCards = document.getElementById('import-summary-cards-imp');
+  const previewContainer = document.getElementById('import-preview-container-imp');
+  const tbody = document.getElementById('tabela-previa-impressoras-body');
+  const btnExec = document.getElementById('btn-executar-importacao-imp');
+
+  if (summaryCards) summaryCards.classList.remove('hidden');
+  if (previewContainer) previewContainer.classList.remove('hidden');
+
+  document.getElementById('prev-imp-total-linhas').textContent = resumo.totalNaFaixa;
+  document.getElementById('prev-imp-total-validas').textContent = resumo.impressorasValidas;
+  document.getElementById('prev-imp-total-ips').textContent = resumo.comIp;
+  document.getElementById('prev-imp-total-seriais').textContent = resumo.comSerial;
+  document.getElementById('prev-imp-total-vazias').textContent = resumo.linhasVazias;
+
+  document.getElementById('label-preview-mostrando-imp').textContent = `Faixa de dados: ${previewRows.length} linhas analisadas`;
+
+  if (btnExec) {
+    btnExec.disabled = resumo.impressorasValidas === 0;
+    btnExec.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Confirmar e Importar (${resumo.impressorasValidas} Impressoras)`;
+  }
+
+  if (tbody) {
+    tbody.innerHTML = previewRows.map(row => {
+      if (row.isVazia) {
+        return `
+          <tr class="opacity-40 bg-gray-900/30">
+            <td class="font-mono text-xs text-gray-500">L${row.linhaExcel}</td>
+            <td colspan="8" class="text-xs text-gray-500 italic">Linha em branco (será ignorada)</td>
+            <td><span class="text-[10px] font-mono px-2 py-0.5 rounded bg-gray-800 text-gray-400">IGNORAR</span></td>
+          </tr>
+        `;
+      }
+
+      const valorFormatado = parseFloat(row.valorUn || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const rateioFormatado = (parseFloat(row.porcentRateio || 0)).toFixed(2) + '%';
+
+      return `
+        <tr class="hover:bg-gray-800/40 text-xs">
+          <td class="font-mono text-gray-400 font-semibold">L${row.linhaExcel}</td>
+          <td class="font-medium text-white">${escapeHtml(row.departamento || '-')}</td>
+          <td>
+            <div class="font-semibold text-cyan-300">${escapeHtml(row.modelo || '-')}</div>
+            <div class="text-[10px] text-gray-500 truncate max-w-[170px]" title="Original na planilha: ${escapeHtml(row.equipamentoOriginal)}">
+              Orig: ${escapeHtml(row.equipamentoOriginal || '-')}
+            </div>
+          </td>
+          <td>
+            ${row.ip ? `
+              <span class="inline-flex items-center gap-1 font-mono text-[11px] text-blue-300 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-500/20">
+                <i class="fa-solid fa-network-wired text-[9px]"></i>
+                ${escapeHtml(row.ip)}
+              </span>
+            ` : '<span class="text-gray-600 italic">Sem IP</span>'}
+          </td>
+          <td>
+            ${row.serialNumber ? `
+              <span class="font-mono text-[11px] text-purple-300 font-medium">
+                <i class="fa-solid fa-barcode text-[10px] mr-1 text-purple-400"></i>
+                ${escapeHtml(row.serialNumber)}
+              </span>
+            ` : '<span class="text-gray-600 italic">Vazio</span>'}
+          </td>
+          <td class="font-mono text-emerald-400 font-semibold">${valorFormatado}</td>
+          <td class="text-gray-300">${escapeHtml(row.centroDeCusto || '-')}</td>
+          <td class="font-mono text-cyan-300 font-semibold">${rateioFormatado}</td>
+          <td class="text-gray-400 max-w-[130px] truncate" title="${escapeHtml(row.observacao || '')}">
+            ${escapeHtml(row.observacao || '-')}
+          </td>
+          <td>
+            <span class="badge-status badge-ativo text-[10px]"><i class="fa-solid fa-check mr-1"></i>Importar</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
+/**
+ * Envia as linhas de impressoras aprovadas para gravação no banco
+ */
+async function executarImportacaoPlanilhaImpressoras() {
+  if (linhasParaImportarImpressoras.length === 0) {
+    showToast('Nenhuma linha carregada para importar', 'warning');
+    return;
+  }
+
+  const statusPadrao = document.getElementById('import-imp-status')?.value || 'Ativo';
+  const btnExec = document.getElementById('btn-executar-importacao-imp');
+  const progressArea = document.getElementById('import-progress-area-imp');
+  const progressText = document.getElementById('import-progress-text-imp');
+
+  btnExec.disabled = true;
+  progressArea.classList.remove('hidden');
+  progressText.textContent = `Gravando dados das impressoras no banco MySQL...`;
+
+  try {
+    const res = await fetch('/api/impressoras/importar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rows: linhasParaImportarImpressoras,
+        statusPadrao
+      })
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+      closeModal('modal-importar-planilha-impressoras');
+
+      // Atualizar todas as telas afetadas
+      carregarImpressoras();
+      if (typeof carregarDashboardGeral === 'function') {
+        carregarDashboardGeral();
+      }
+    } else {
+      showToast('Erro na importação: ' + data.message, 'error');
+    }
+  } catch (error) {
+    console.error('Falha ao executar importação de impressoras:', error);
+    showToast('Erro na conexão com o servidor', 'error');
+  } finally {
+    btnExec.disabled = false;
+    progressArea.classList.add('hidden');
+  }
+}
