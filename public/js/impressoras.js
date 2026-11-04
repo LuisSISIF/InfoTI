@@ -964,57 +964,106 @@ function resetarArquivoPlanilhaImpressoras(event) {
 
 /**
  * Extrai Modelo, IP e Serial Number a partir do texto combinado da coluna EQUIPAMENTO.
+ * Suporta qualquer ordem (Modelo-IP-Serial, Modelo-Serial-IP, IP-Modelo-Serial),
+ * múltiplos delimitadores ( - , – , — , / , | , quebra de linha),
+ * e prefixos opcionais (IP:, SN:, S/N:, Serial:, Modelo:).
  */
 function extrairEquipamentoImp(rawEquip) {
   if (!rawEquip) return { modelo: '', ip: '', serialNumber: '' };
 
-  const text = String(rawEquip).trim();
+  let text = String(rawEquip).trim();
   if (!text) return { modelo: '', ip: '', serialNumber: '' };
 
-  // 1. Procura por formato de IPv4 na célula (ex: 10.1.28.70)
+  // 1. Encontrar o endereço IP (IPv4 padrão)
+  let ip = '';
   const ipRegex = /\b((?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))\b/;
   const ipMatch = text.match(ipRegex);
 
+  let resto = text;
   if (ipMatch) {
-    const ip = ipMatch[1];
-    const ipIndex = text.indexOf(ip);
-
-    // O que está antes do IP é o Modelo
-    let antes = text.substring(0, ipIndex).trim();
-    antes = antes.replace(/[\s\-_]+$/, '').trim();
-
-    // O que está depois do IP é o Serial Number (se existir)
-    let depois = text.substring(ipIndex + ip.length).trim();
-    depois = depois.replace(/^[\s\-_]+/, '').trim();
-
-    return {
-      modelo: antes || text,
-      ip: ip,
-      serialNumber: depois || ''
-    };
+    ip = ipMatch[1];
+    // Substitui o IP e possíveis prefixos (ex: 'IP:', 'IP -', 'IP: ') por um marcador neutro ' || '
+    resto = text.replace(new RegExp('(?:\\bIP\\s*[:=-]?\\s*)?' + ip.replace(/\\./g, '\\.') + '(?:\\s*[:=-]?\\s*)?', 'i'), ' || ');
   }
 
-  // 2. Fallback caso não encontre padrão IP: divide por ' - '
-  const partes = text.split(/\s+-\s+/);
-  if (partes.length === 1) {
-    return {
-      modelo: partes[0].trim(),
-      ip: '',
-      serialNumber: ''
-    };
-  } else if (partes.length === 2) {
-    return {
-      modelo: partes[0].trim(),
-      ip: '',
-      serialNumber: partes[1].trim()
-    };
-  } else {
-    return {
-      modelo: partes[0].trim(),
-      ip: partes[1].trim(),
-      serialNumber: partes.slice(2).join(' - ').trim()
-    };
+  // 2. Dividir o resto em partes usando delimitadores comuns: '||', ' - ', ' – ', ' — ', ' / ', '|', quebra de linha
+  let partes = resto
+    .split(/(?:\s*\|\|\s*|\s+[-–—/|]\s+|\r?\n|\t|;\s*)/)
+    .map(p => p.trim())
+    .map(p => p.replace(/^[-–—/:|_,\s]+|[-–—/:|_,\s]+$/g, '').trim())
+    .filter(Boolean);
+
+  let modelo = '';
+  let serialNumber = '';
+
+  // Identificar se alguma parte tem prefixo explícito de Serial (ex: 'S/N:', 'Serial:', 'SN:')
+  const serialPrefixRegex = /^(?:S\/?N|SERIAL|N\/?S|SERIE|TAG)\s*[:=-]?\s*(.*)$/i;
+  // Identificar se alguma parte tem prefixo explícito de Modelo (ex: 'MOD:', 'MODELO:')
+  const modeloPrefixRegex = /^(?:MOD(?:ELO)?)\s*[:=-]?\s*(.*)$/i;
+
+  const partesNaoIdentificadas = [];
+
+  for (const parte of partes) {
+    const sMatch = parte.match(serialPrefixRegex);
+    const mMatch = parte.match(modeloPrefixRegex);
+
+    if (sMatch && !serialNumber) {
+      serialNumber = sMatch[1].trim();
+    } else if (mMatch && !modelo) {
+      modelo = mMatch[1].trim();
+    } else {
+      partesNaoIdentificadas.push(parte);
+    }
   }
+
+  if (partesNaoIdentificadas.length === 1) {
+    if (!modelo) {
+      modelo = partesNaoIdentificadas[0];
+    } else if (!serialNumber) {
+      serialNumber = partesNaoIdentificadas[0];
+    }
+  } else if (partesNaoIdentificadas.length >= 2) {
+    const p1 = partesNaoIdentificadas[0];
+    const p2 = partesNaoIdentificadas[1];
+
+    // Checar marcas comuns de impressora no p1 ou p2
+    const marcasRegex = /\b(brother|canon|hp|epson|kyocera|samsung|zebra|ricoh|lexmark|xerox|dcp|mfc|ecotank|laserjet|deskjet|ecosys|pagewide|laser)\b/i;
+    const p1TemMarca = marcasRegex.test(p1);
+    const p2TemMarca = marcasRegex.test(p2);
+
+    // Checar se p2 ou p1 parece ser serial (geralmente sem espaço, alfanumérico)
+    const p2PareceSerial = /^[A-Z0-9]{5,}$/i.test(p2);
+    const p1PareceSerial = /^[A-Z0-9]{5,}$/i.test(p1);
+
+    if (!modelo && !serialNumber) {
+      if (p1TemMarca && !p2TemMarca) {
+        modelo = p1;
+        serialNumber = p2;
+      } else if (!p1TemMarca && p2TemMarca) {
+        modelo = p2;
+        serialNumber = p1;
+      } else if (p2PareceSerial && !p1PareceSerial) {
+        modelo = p1;
+        serialNumber = p2;
+      } else if (p1PareceSerial && !p2PareceSerial) {
+        modelo = p2;
+        serialNumber = p1;
+      } else {
+        modelo = p1;
+        serialNumber = p2;
+      }
+    } else if (!modelo) {
+      modelo = partesNaoIdentificadas.join(' - ');
+    } else if (!serialNumber) {
+      serialNumber = partesNaoIdentificadas.join(' - ');
+    }
+  }
+
+  return {
+    modelo: modelo.trim(),
+    ip: ip.trim(),
+    serialNumber: serialNumber.trim()
+  };
 }
 
 function parseValorNumericoImp(val) {
