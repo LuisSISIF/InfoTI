@@ -60,10 +60,10 @@ O **InfoTI** foi concebido e estruturado especificamente para resolver essas dor
 - **Gestão de Comunicados:** Inclusão ágil de avisos com prazos, responsáveis e marcação de conclusão.
 
 ### 2. 🖨️ Gestão de Impressoras & Custos de Outsourcing
-- **Ficha Técnica Completa:** Cadastro de marca, modelo, número de série, endereço IP (com botão de cópia instantânea), centro de custo, valor por folha impressa e percentual de rateio (0% a 100%).
+- **Ficha Técnica Completa:** Cadastro de marca, modelo, número de série, endereço IP (com botão de cópia instantânea), centro de custo, valor por folha impressa e status.
 - **Lançamento Mensal de Contagens:**
   - Modal interativo listando todas as impressoras com contagem anterior e campo para digitação do contador atual.
-  - Cálculo instantâneo em tempo real de **páginas impressas no mês** e **custo financeiro total estimado (R$)**.
+  - Cálculo instantâneo em tempo real de **páginas impressas no mês**, **custo financeiro total estimado (R$)** e **percentual de rateio (%)** dinâmico: `(valorUnitario * ctImpressoes) / custoTotal * 100`.
 - **Histórico Consolidado de Contagens:**
   - Consulta detalhada mês a mês de todas as impressões realizadas.
   - Indicadores no topo com o total de páginas impressas e valor total consolidado do período.
@@ -280,7 +280,7 @@ A API disponibiliza endpoints estruturados em padrão REST com respostas em form
 | | `DELETE` | `/api/computadores/:id` | Remove um computador e desvincula licenças |
 | **Impressoras** | `GET` | `/api/impressoras` | Lista impressoras e dados de outsourcing |
 | | `POST` | `/api/impressoras` | Cadastra nova impressora na rede |
-| | `PUT` | `/api/impressoras/:id` | Edita dados técnicos e rateio de impressora |
+| | `PUT` | `/api/impressoras/:id` | Edita dados técnicos de impressora |
 | | `DELETE` | `/api/impressoras/:id` | Exclui registro de impressora |
 | **Contagens** | `GET` | `/api/contagem/historico` | Consulta histórico de contagens por mês/ano |
 | | `POST` | `/api/contagem/salvar-mensal` | Registra medição mensal em lote |

@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS impressoras (
   ip VARCHAR(45) NOT NULL DEFAULT '',
   valorUn DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
   centroDeCusto VARCHAR(45) NOT NULL DEFAULT '',
-  porcentRateio DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
   status ENUM('Ativo', 'Defeito', 'Reserva') DEFAULT 'Ativo',
   observacao TEXT NULL,
   criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -45,6 +44,7 @@ CREATE TABLE IF NOT EXISTS contagemiMpressao (
   ctFolhasAtual INT NOT NULL DEFAULT 0,
   ctImpressoes INT NOT NULL DEFAULT 0,
   custoTotal DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  porcentRateio DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
   dataContagem DATE NOT NULL,
   criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (idImpressora) REFERENCES impressoras(id) ON DELETE CASCADE

@@ -14,8 +14,7 @@ router.get('/', async (req, res) => {
         i.ip, 
         i.serialNumber, 
         i.valorUn, 
-        i.centroDeCusto,
-        i.porcentRateio
+        i.centroDeCusto
       FROM contagemiMpressao c
       INNER JOIN impressoras i ON c.idImpressora = i.id
       WHERE 1=1
@@ -137,28 +136,74 @@ router.post('/', async (req, res) => {
     const { items, dataContagem } = req.body;
     const dateToUse = dataContagem || new Date().toISOString().split('T')[0];
 
-    const records = Array.isArray(items) ? items : [req.body];
-    const inserted = [];
+    const rawRecords = Array.isArray(items) ? items : (req.body ? [req.body] : []);
+    if (rawRecords.length === 0) {
+      return res.status(400).json({ success: false, message: 'Nenhum registro de contagem enviado' });
+    }
 
-    for (const item of records) {
+    // Primeiro passo: normalizar e calcular custo unitário de cada item
+    const parsedRecords = [];
+    for (const item of rawRecords) {
       const idImpressora = parseInt(item.idImpressora, 10);
+      if (!idImpressora) continue;
+
       const ctAnterior = parseInt(item.ctFolhasAnterior || 0, 10);
       const ctAtual = parseInt(item.ctFolhasAtual || 0, 10);
       const ctImpressoes = Math.max(0, ctAtual - ctAnterior);
-      
+
+      let valorUn = parseFloat(item.valorUn);
+      if (isNaN(valorUn) || valorUn <= 0) {
+        const [imp] = await pool.query('SELECT valorUn FROM impressoras WHERE id = ?', [idImpressora]);
+        valorUn = imp.length > 0 ? parseFloat(imp[0].valorUn || 0) : 0;
+      }
+
       let custoTotal = parseFloat(item.custoTotal);
       if (isNaN(custoTotal) || custoTotal <= 0) {
-        // Obter valorUn da impressora para calcular
-        const [imp] = await pool.query('SELECT valorUn FROM impressoras WHERE id = ?', [idImpressora]);
-        const valorUn = imp.length > 0 ? parseFloat(imp[0].valorUn || 0) : 0;
-        custoTotal = (ctImpressoes * valorUn);
+        custoTotal = ctImpressoes * valorUn;
+      }
+
+      parsedRecords.push({
+        idImpressora,
+        ctAnterior,
+        ctAtual,
+        ctImpressoes,
+        valorUn,
+        custoTotal,
+        porcentRateioInformado: item.porcentRateio !== undefined && item.porcentRateio !== null ? parseFloat(item.porcentRateio) : null,
+        dataContagem: item.dataContagem || dateToUse
+      });
+    }
+
+    if (parsedRecords.length === 0) {
+      return res.status(400).json({ success: false, message: 'Nenhuma impressora válida identificada' });
+    }
+
+    // Calcular Custo Total Geral do lote/mês para apuração do % Rateio
+    // Rateio: (valorUnitario * ctImpressoes) / custoTotalGeral * 100
+    const custoTotalGeral = parsedRecords.reduce((acc, r) => acc + (r.custoTotal || 0), 0);
+
+    const inserted = [];
+    for (const r of parsedRecords) {
+      let porcentRateio = 0.00;
+      if (r.porcentRateioInformado !== null && !isNaN(r.porcentRateioInformado) && parsedRecords.length === 1) {
+        porcentRateio = Math.min(100, Math.max(0, r.porcentRateioInformado));
+      } else if (custoTotalGeral > 0) {
+        porcentRateio = (r.custoTotal / custoTotalGeral) * 100;
       }
 
       const [result] = await pool.query(
         `INSERT INTO contagemiMpressao 
-        (idImpressora, ctFolhasAnterior, ctFolhasAtual, ctImpressoes, custoTotal, dataContagem) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [idImpressora, ctAnterior, ctAtual, ctImpressoes, custoTotal.toFixed(2), item.dataContagem || dateToUse]
+        (idImpressora, ctFolhasAnterior, ctFolhasAtual, ctImpressoes, custoTotal, porcentRateio, dataContagem) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          r.idImpressora,
+          r.ctAnterior,
+          r.ctAtual,
+          r.ctImpressoes,
+          r.custoTotal.toFixed(2),
+          porcentRateio.toFixed(2),
+          r.dataContagem
+        ]
       );
       inserted.push(result.insertId);
     }

@@ -58,7 +58,7 @@ function renderizarTabelaImpressoras(lista) {
   if (lista.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center py-8 text-gray-400">
+        <td colspan="9" class="text-center py-8 text-gray-400">
           <i class="fa-solid fa-print text-2xl text-gray-600 mb-2 block"></i>
           Nenhuma impressora encontrada com os filtros selecionados.
         </td>
@@ -74,7 +74,6 @@ function renderizarTabelaImpressoras(lista) {
     if (imp.status === 'Reserva') statusClass = 'badge-reserva';
 
     const valorUnitarioFormatado = parseFloat(imp.valorUn || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const rateioFormatado = (parseFloat(imp.porcentRateio || 0)).toFixed(2) + '%';
 
     return `
       <tr class="hover:bg-gray-800/40 transition-colors">
@@ -96,7 +95,6 @@ function renderizarTabelaImpressoras(lista) {
         </td>
         <td class="font-mono text-xs text-emerald-400 font-semibold">${valorUnitarioFormatado}</td>
         <td class="text-xs text-gray-300">${escapeHtml(imp.centroDeCusto || '-')}</td>
-        <td class="font-mono text-xs text-cyan-300 font-semibold">${rateioFormatado}</td>
         <td>
           <span class="badge-status ${statusClass}">
             <span class="h-1.5 w-1.5 rounded-full ${imp.status === 'Ativo' ? 'bg-emerald-400' : imp.status === 'Defeito' ? 'bg-rose-400' : 'bg-amber-400'}"></span>
@@ -151,7 +149,6 @@ function openModalImpressora() {
   document.getElementById('form-impressora').reset();
   document.getElementById('imp-id').value = '';
   document.getElementById('imp-valorUn').value = '0.08';
-  document.getElementById('imp-porcentRateio').value = '0.00';
   document.getElementById('imp-status').value = 'Ativo';
   openModal('modal-impressora');
 }
@@ -171,7 +168,6 @@ function editarImpressora(id) {
   document.getElementById('imp-ip').value = imp.ip || '';
   document.getElementById('imp-valorUn').value = parseFloat(imp.valorUn || 0).toFixed(2);
   document.getElementById('imp-centroCusto').value = imp.centroDeCusto || '';
-  document.getElementById('imp-porcentRateio').value = parseFloat(imp.porcentRateio || 0).toFixed(2);
   document.getElementById('imp-status').value = imp.status || 'Ativo';
   document.getElementById('imp-observacao').value = imp.observacao || '';
 
@@ -191,15 +187,8 @@ async function salvarImpressora(event) {
   const ip = document.getElementById('imp-ip').value.trim();
   const valorUn = parseFloat(document.getElementById('imp-valorUn').value || 0);
   const centroDeCusto = document.getElementById('imp-centroCusto').value.trim();
-  const porcentRateio = parseFloat(document.getElementById('imp-porcentRateio').value || 0);
   const status = document.getElementById('imp-status').value;
   const observacao = document.getElementById('imp-observacao').value.trim();
-
-  // Validação estrita de porcentagem de rateio entre 0 e 100 com até 2 casas decimais
-  if (isNaN(porcentRateio) || porcentRateio < 0 || porcentRateio > 100) {
-    showToast('A porcentagem de rateio deve estar entre 0% e 100%', 'warning');
-    return;
-  }
 
   // Validação de custo unitário
   if (isNaN(valorUn) || valorUn < 0) {
@@ -214,7 +203,6 @@ async function salvarImpressora(event) {
     ip,
     valorUn: valorUn.toFixed(2),
     centroDeCusto,
-    porcentRateio: porcentRateio.toFixed(2),
     status,
     observacao
   };
@@ -366,6 +354,9 @@ function renderizarLinhasContagemMensal() {
         <td class="text-right font-mono text-xs font-bold text-emerald-400 ct-custo-total">
           R$ ${((ctAtualSugerida - ctAnterior) * valorUn).toFixed(2)}
         </td>
+        <td class="text-center font-mono text-xs font-bold text-cyan-300 ct-rateio">
+          0.00%
+        </td>
       </tr>
     `;
   }).join('');
@@ -395,23 +386,37 @@ function recalcularContagemLinha(inputEl) {
 
 /**
  * Recalcula a soma total de todas as impressoras no modal de contagem
+ * e atualiza o % de rateio de cada uma: (valorUnitario * ctimpressoes) / custoTotal * 100
  */
 function recalcularTotalGeralContagem() {
   const rows = document.querySelectorAll('#tabela-contagem-mensal-body tr');
   let soma = 0;
+  const listaCustos = [];
 
   rows.forEach(r => {
     const anterior = parseInt(r.querySelector('.ct-anterior')?.value || 0, 10);
     const atual = parseInt(r.querySelector('.ct-atual')?.value || 0, 10);
     const valorUn = parseFloat(r.dataset.valorUn || 0);
     const diff = Math.max(0, atual - anterior);
-    soma += (diff * valorUn);
+    const custo = diff * valorUn;
+    soma += custo;
+    listaCustos.push({ row: r, custo });
   });
 
   const totalEl = document.getElementById('contagem-total-geral');
   if (totalEl) {
     totalEl.textContent = soma.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
+
+  // Atualizar a porcentagem de rateio de cada impressora em tempo real
+  listaCustos.forEach(({ row, custo }) => {
+    const rateioEl = row.querySelector('.ct-rateio');
+    if (rateioEl) {
+      const pct = soma > 0 ? ((custo / soma) * 100) : 0;
+      rateioEl.textContent = `${pct.toFixed(2)}%`;
+      row.dataset.porcentRateio = pct.toFixed(2);
+    }
+  });
 }
 
 /**
@@ -436,6 +441,7 @@ async function salvarContagemMensal() {
         ctFolhasAnterior,
         ctFolhasAtual,
         ctImpressoes,
+        valorUn,
         custoTotal: custoTotal.toFixed(2),
         dataContagem
       });
@@ -446,6 +452,14 @@ async function salvarContagemMensal() {
     showToast('Nenhuma impressora disponível para registrar contagem', 'warning');
     return;
   }
+
+  // Rateio = (valorUnitario * ctimpressoes) / custoTotal * 100
+  const custoTotalLote = items.reduce((acc, it) => acc + parseFloat(it.custoTotal || 0), 0);
+  items.forEach(it => {
+    const custo = parseFloat(it.custoTotal || 0);
+    const pct = custoTotalLote > 0 ? ((custo / custoTotalLote) * 100) : 0;
+    it.porcentRateio = pct.toFixed(2);
+  });
 
   try {
     const res = await fetch('/api/contagem', {
@@ -476,7 +490,7 @@ async function openModalHistoricoContagem() {
   if (tbody) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="text-center py-6 text-gray-500">
+        <td colspan="9" class="text-center py-6 text-gray-500">
           <i class="fa-solid fa-spinner fa-spin mr-2"></i> Buscando histórico de contagens...
         </td>
       </tr>
@@ -491,7 +505,7 @@ async function openModalHistoricoContagem() {
       if (data.data.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="8" class="text-center py-6 text-gray-400">
+            <td colspan="9" class="text-center py-6 text-gray-400">
               Nenhuma contagem registrada anteriormente.
             </td>
           </tr>
@@ -508,6 +522,7 @@ async function openModalHistoricoContagem() {
           <td class="font-mono text-xs text-white">${c.ctFolhasAtual}</td>
           <td class="font-mono text-xs font-bold text-cyan-300">${c.ctImpressoes}</td>
           <td class="font-mono text-xs font-bold text-emerald-400">${formatarMoeda(c.custoTotal)}</td>
+          <td class="font-mono text-xs font-bold text-cyan-300 text-center">${(parseFloat(c.porcentRateio || 0)).toFixed(2)}%</td>
           <td class="text-right">
             <button onclick="excluirRegistroContagem(${c.id})" title="Excluir Registro" class="p-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400">
               <i class="fa-solid fa-trash text-xs"></i>
@@ -619,7 +634,7 @@ async function carregarHistoricoContagens() {
   if (tbody) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center py-8 text-gray-500">
+        <td colspan="11" class="text-center py-8 text-gray-500">
           <i class="fa-solid fa-spinner fa-spin mr-2"></i> Consultando registros no banco de dados MySQL...
         </td>
       </tr>
@@ -677,7 +692,7 @@ function renderizarTabelaHistoricoPagina(lista, mesAnoRef, resumo) {
   if (lista.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center py-10 text-gray-400">
+        <td colspan="11" class="text-center py-10 text-gray-400">
           <i class="fa-regular fa-calendar-xmark text-3xl text-gray-600 mb-2 block"></i>
           Nenhuma contagem de impressão encontrada para o período <strong>${periodoTexto}</strong>.
           <div class="mt-2 text-xs text-gray-500">
@@ -695,6 +710,7 @@ function renderizarTabelaHistoricoPagina(lista, mesAnoRef, resumo) {
     const folhas = parseInt(c.ctImpressoes || 0, 10);
     const custo = parseFloat(c.custoTotal || 0);
     const valorUn = parseFloat(c.valorUn || 0);
+    const rateio = parseFloat(c.porcentRateio || 0);
 
     return `
       <tr class="hover:bg-gray-800/40 text-xs transition-colors">
@@ -718,6 +734,9 @@ function renderizarTabelaHistoricoPagina(lista, mesAnoRef, resumo) {
         <td class="text-right font-mono font-bold text-emerald-400 text-sm">
           ${formatarMoeda(custo)}
         </td>
+        <td class="text-center font-mono font-bold text-cyan-300 text-xs">
+          ${rateio.toFixed(2)}%
+        </td>
         <td class="text-right">
           <button onclick="excluirRegistroContagem(${c.id})" title="Excluir Contagem" class="p-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-colors">
             <i class="fa-solid fa-trash text-xs"></i>
@@ -732,6 +751,11 @@ function renderizarTabelaHistoricoPagina(lista, mesAnoRef, resumo) {
     tfoot.classList.remove('hidden');
     document.getElementById('foot-total-folhas').textContent = `${(resumo?.totalImpressoes || 0).toLocaleString('pt-BR')} folhas`;
     document.getElementById('foot-total-custo').textContent = formatarMoeda(resumo?.totalCusto || 0);
+    const totalRateio = lista.reduce((acc, c) => acc + parseFloat(c.porcentRateio || 0), 0);
+    const footRateioEl = document.getElementById('foot-total-rateio');
+    if (footRateioEl) {
+      footRateioEl.textContent = lista.length > 0 ? `${totalRateio.toFixed(2)}%` : '0.00%';
+    }
   }
 }
 
@@ -1269,14 +1293,13 @@ function renderizarPreviaImportacaoImpressoras(previewRows, resumo) {
         return `
           <tr class="opacity-40 bg-gray-900/30">
             <td class="font-mono text-xs text-gray-500">L${row.linhaExcel}</td>
-            <td colspan="8" class="text-xs text-gray-500 italic">Linha em branco (será ignorada)</td>
+            <td colspan="7" class="text-xs text-gray-500 italic">Linha em branco (será ignorada)</td>
             <td><span class="text-[10px] font-mono px-2 py-0.5 rounded bg-gray-800 text-gray-400">IGNORAR</span></td>
           </tr>
         `;
       }
 
       const valorFormatado = parseFloat(row.valorUn || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-      const rateioFormatado = (parseFloat(row.porcentRateio || 0)).toFixed(2) + '%';
 
       return `
         <tr class="hover:bg-gray-800/40 text-xs">
@@ -1306,7 +1329,6 @@ function renderizarPreviaImportacaoImpressoras(previewRows, resumo) {
           </td>
           <td class="font-mono text-emerald-400 font-semibold">${valorFormatado}</td>
           <td class="text-gray-300">${escapeHtml(row.centroDeCusto || '-')}</td>
-          <td class="font-mono text-cyan-300 font-semibold">${rateioFormatado}</td>
           <td class="text-gray-400 max-w-[130px] truncate" title="${escapeHtml(row.observacao || '')}">
             ${escapeHtml(row.observacao || '-')}
           </td>

@@ -224,11 +224,6 @@ async function processarEInserirImpressoras(linhasFormatadas, statusPadrao = 'At
       continue;
     }
 
-    let rateioNum = parseFloat(item.porcentRateio);
-    if (isNaN(rateioNum)) rateioNum = 0.0;
-    if (rateioNum < 0) rateioNum = 0;
-    if (rateioNum > 100) rateioNum = 100;
-
     let valorUnNum = parseFloat(item.valorUn);
     if (isNaN(valorUnNum)) valorUnNum = 0.0;
 
@@ -237,8 +232,8 @@ async function processarEInserirImpressoras(linhasFormatadas, statusPadrao = 'At
 
     const [result] = await pool.query(
       `INSERT INTO impressoras 
-      (departamento, modelo, serialNumber, ip, valorUn, centroDeCusto, porcentRateio, observacao, status) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (departamento, modelo, serialNumber, ip, valorUn, centroDeCusto, observacao, status) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.departamento || '',
         modeloFinal,
@@ -246,7 +241,6 @@ async function processarEInserirImpressoras(linhasFormatadas, statusPadrao = 'At
         item.ip || '',
         valorUnNum.toFixed(2),
         item.centroDeCusto || '',
-        rateioNum.toFixed(2),
         item.observacao || '',
         statusFinal
       ]
@@ -327,7 +321,6 @@ router.post('/', async (req, res) => {
       ip,
       valorUn,
       centroDeCusto,
-      porcentRateio,
       observacao,
       status
     } = req.body;
@@ -336,19 +329,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Departamento e Modelo são obrigatórios' });
     }
 
-    // Validação de porcentagem (0 a 100)
-    let rateioNum = parseFloat(porcentRateio);
-    if (isNaN(rateioNum)) rateioNum = 0.0;
-    if (rateioNum < 0) rateioNum = 0;
-    if (rateioNum > 100) rateioNum = 100;
-
     let valorUnNum = parseFloat(valorUn);
     if (isNaN(valorUnNum)) valorUnNum = 0.0;
 
     const [result] = await pool.query(
       `INSERT INTO impressoras 
-      (departamento, modelo, serialNumber, ip, valorUn, centroDeCusto, porcentRateio, observacao, status) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (departamento, modelo, serialNumber, ip, valorUn, centroDeCusto, observacao, status) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         departamento || '',
         modelo || '',
@@ -356,7 +343,6 @@ router.post('/', async (req, res) => {
         ip || '',
         valorUnNum.toFixed(2),
         centroDeCusto || '',
-        rateioNum.toFixed(2),
         observacao || '',
         status || 'Ativo'
       ]
@@ -384,15 +370,9 @@ router.put('/:id', async (req, res) => {
       ip,
       valorUn,
       centroDeCusto,
-      porcentRateio,
       observacao,
       status
     } = req.body;
-
-    let rateioNum = parseFloat(porcentRateio);
-    if (isNaN(rateioNum)) rateioNum = 0.0;
-    if (rateioNum < 0) rateioNum = 0;
-    if (rateioNum > 100) rateioNum = 100;
 
     let valorUnNum = parseFloat(valorUn);
     if (isNaN(valorUnNum)) valorUnNum = 0.0;
@@ -405,7 +385,6 @@ router.put('/:id', async (req, res) => {
         ip = ?,
         valorUn = ?,
         centroDeCusto = ?,
-        porcentRateio = ?,
         observacao = ?,
         status = ?
       WHERE id = ?`,
@@ -416,7 +395,6 @@ router.put('/:id', async (req, res) => {
         ip || '',
         valorUnNum.toFixed(2),
         centroDeCusto || '',
-        rateioNum.toFixed(2),
         observacao || '',
         status || 'Ativo',
         id

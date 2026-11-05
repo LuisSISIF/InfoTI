@@ -30,12 +30,12 @@ async function seedInitialData() {
   if (impRows[0].total === 0) {
     console.log('Inserindo impressoras iniciais...');
     await connection.query(`
-      INSERT INTO impressoras (departamento, modelo, serialNumber, ip, valorUn, centroDeCusto, porcentRateio, observacao, status) VALUES
-      ('Financeiro', 'HP LaserJet Enterprise M507', 'VNB3B09921', '192.168.1.50', 0.08, 'CC-FIN-102', 40.00, 'Impressora monocromática de alta velocidade para notas e relatórios', 'Ativo'),
-      ('Recursos Humanos', 'Kyocera ECOSYS P3155dn', 'KCD8823104', '192.168.1.51', 0.07, 'CC-RH-105', 25.00, 'Impressora do setor de admissão e DP', 'Ativo'),
-      ('Diretoria & Jurídico', 'Epson EcoTank L5290', 'EP99281729', '192.168.1.52', 0.12, 'CC-DIR-101', 20.00, 'Multifuncional colorida conectada via Wi-Fi e rede cabeada', 'Ativo'),
-      ('Logística & Expedição', 'Zebra ZD220 Térmica', 'ZB11209844', '192.168.1.53', 0.04, 'CC-LOG-110', 15.00, 'Impressora térmica para etiquetas de despacho', 'Ativo'),
-      ('TI - Manutenção', 'Brother HL-L6200DW', 'BRO7736201', '192.168.1.54', 0.06, 'CC-TI-100', 0.00, 'Sensor de papel com falha intermitente, aguardando peça', 'Defeito');
+      INSERT INTO impressoras (departamento, modelo, serialNumber, ip, valorUn, centroDeCusto, observacao, status) VALUES
+      ('Financeiro', 'HP LaserJet Enterprise M507', 'VNB3B09921', '192.168.1.50', 0.08, 'CC-FIN-102', 'Impressora monocromática de alta velocidade para notas e relatórios', 'Ativo'),
+      ('Recursos Humanos', 'Kyocera ECOSYS P3155dn', 'KCD8823104', '192.168.1.51', 0.07, 'CC-RH-105', 'Impressora do setor de admissão e DP', 'Ativo'),
+      ('Diretoria & Jurídico', 'Epson EcoTank L5290', 'EP99281729', '192.168.1.52', 0.12, 'CC-DIR-101', 'Multifuncional colorida conectada via Wi-Fi e rede cabeada', 'Ativo'),
+      ('Logística & Expedição', 'Zebra ZD220 Térmica', 'ZB11209844', '192.168.1.53', 0.04, 'CC-LOG-110', 'Impressora térmica para etiquetas de despacho', 'Ativo'),
+      ('TI - Manutenção', 'Brother HL-L6200DW', 'BRO7736201', '192.168.1.54', 0.06, 'CC-TI-100', 'Sensor de papel com falha intermitente, aguardando peça', 'Defeito');
     `);
   }
 
@@ -98,8 +98,8 @@ async function seedInitialData() {
     const [imps] = await connection.query('SELECT id, valorUn FROM impressoras ORDER BY id ASC LIMIT 2');
     if (imps.length > 0) {
       await connection.query(`
-        INSERT INTO contagemiMpressao (idImpressora, ctFolhasAnterior, ctFolhasAtual, ctImpressoes, custoTotal, dataContagem) VALUES
-        (${imps[0].id}, 12450, 15890, 3440, ${(3440 * Number(imps[0].valorUn)).toFixed(2)}, '2026-09-30');
+        INSERT INTO contagemiMpressao (idImpressora, ctFolhasAnterior, ctFolhasAtual, ctImpressoes, custoTotal, porcentRateio, dataContagem) VALUES
+        (${imps[0].id}, 12450, 15890, 3440, ${(3440 * Number(imps[0].valorUn)).toFixed(2)}, 100.00, '2026-09-30');
       `);
     }
   }

@@ -426,7 +426,6 @@
                   <th>Serial / IP</th>
                   <th>Valor Un.</th>
                   <th>Centro Custo</th>
-                  <th>% Rateio</th>
                   <th>Status</th>
                   <th>Observação</th>
                   <th class="text-right">Ações</th>
@@ -434,7 +433,7 @@
               </thead>
               <tbody id="tabela-impressoras-body">
                 <tr>
-                  <td colspan="10" class="text-center py-8 text-gray-500">
+                  <td colspan="9" class="text-center py-8 text-gray-500">
                     <i class="fa-solid fa-spinner fa-spin mr-2"></i> Carregando impressoras cadastradas...
                   </td>
                 </tr>
@@ -558,12 +557,13 @@
                   <th>Contagem Atual</th>
                   <th class="text-center">Folhas Impressas</th>
                   <th class="text-right">Custo Total</th>
+                  <th class="text-center">% Rateio</th>
                   <th class="text-right">Ação</th>
                 </tr>
               </thead>
               <tbody id="tabela-historico-pagina-body">
                 <tr>
-                  <td colspan="10" class="text-center py-8 text-gray-500">
+                  <td colspan="11" class="text-center py-8 text-gray-500">
                     <i class="fa-solid fa-spinner fa-spin mr-2"></i> Buscando histórico de contagens no banco...
                   </td>
                 </tr>
@@ -578,6 +578,9 @@
                   </td>
                   <td id="foot-total-custo" class="text-right font-mono text-sm text-emerald-400 py-3.5 px-4 font-extrabold">
                     R$ 0,00
+                  </td>
+                  <td id="foot-total-rateio" class="text-center font-mono text-sm text-cyan-300 py-3.5 px-4 font-extrabold">
+                    100.00%
                   </td>
                   <td></td>
                 </tr>
@@ -1192,13 +1195,6 @@
             <input type="text" id="imp-centroCusto" placeholder="Ex: CC-FIN-102" class="tech-input text-xs">
           </div>
 
-          <!-- Porcentagem de Rateio -->
-          <div>
-            <label class="block text-xs font-medium text-gray-300 mb-1">Porcentagem de Rateio (%) *</label>
-            <input type="number" id="imp-porcentRateio" step="0.01" min="0" max="100" required placeholder="40.00" class="tech-input font-mono text-xs">
-            <span class="text-[10px] text-gray-500">Permitido entre 0% e 100% com até 2 casas decimais</span>
-          </div>
-
           <!-- Status -->
           <div>
             <label class="block text-xs font-medium text-gray-300 mb-1">Status</label>
@@ -1268,6 +1264,7 @@
                 <th class="w-36">Contagem Atual *</th>
                 <th class="w-28 text-center">Folhas Mês</th>
                 <th class="w-32 text-right">Custo Total</th>
+                <th class="w-24 text-center">% Rateio</th>
               </tr>
             </thead>
             <tbody id="tabela-contagem-mensal-body">
@@ -1317,6 +1314,7 @@
                 <th>Ct. Atual</th>
                 <th>Total Impressões</th>
                 <th>Custo Total</th>
+                <th class="text-center">% Rateio</th>
                 <th class="text-right">Ação</th>
               </tr>
             </thead>
@@ -1841,7 +1839,7 @@
                 <div><span class="text-white font-bold">Col F:</span> Valor Unitário</div>
                 <div><span class="text-gray-500 line-through">Col G:</span> <span class="text-gray-500">Ignorada</span></div>
                 <div><span class="text-white font-bold">Col H:</span> Centro de Custo</div>
-                <div><span class="text-white font-bold">Col I:</span> % Rateio</div>
+                <div><span class="text-gray-500 line-through">Col I:</span> <span class="text-gray-500">Ignorada (Rateio na Contagem)</span></div>
                 <div><span class="text-gray-500 line-through">Col J:</span> <span class="text-gray-500">Ignorada</span></div>
                 <div class="col-span-2"><span class="text-white font-bold">Col K:</span> Observações</div>
               </div>
@@ -1943,7 +1941,6 @@
                   <th>Serial Extraído</th>
                   <th>Valor Un.</th>
                   <th>Centro Custo</th>
-                  <th>% Rateio</th>
                   <th>Observações</th>
                   <th>Ação</th>
                 </tr>
